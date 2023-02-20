@@ -267,7 +267,7 @@ void Custom_APP_Init(void)
         Custom_App_Context.Rwn_Notification_Status=0;
         Custom_App_Context.R_w_nr_Indication_Status=0;
 
-	  for (int i=0 ; i<(249-1) ; i++)
+	  for (int i=0 ; i<(SizeR_W_Nr-1) ; i++)
 	  {
 		  NotifyCharData[i] = i+1;
 		  IndicateCharData[i] = i+1;

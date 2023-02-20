@@ -256,7 +256,6 @@ static void Connection_Interval_Update_Req(void);
 #endif /* L2CAP_REQUEST_NEW_CONN_PARAM != 0 */
 
 /* USER CODE BEGIN PFP */
-//void BLE_SVC_L2CAP_Conn_Update(void);
 void BLE_SVC_L2CAP_Conn_Update_Slave_Latency(void);
 /* USER CODE END PFP */
 
@@ -410,9 +409,9 @@ void APP_BLE_Init(void)
   Adv_Request(APP_BLE_FAST_ADV);
 
   /* USER CODE BEGIN APP_BLE_Init_2 */
-	UTIL_SEQ_RegTask(1<<CFG_TASK_SW1_BUTTON_PUSHED_ID,UTIL_SEQ_RFU, Connection_Interval_Update_Req);
-	UTIL_SEQ_RegTask(1<<CFG_TASK_SW2_BUTTON_PUSHED_ID,UTIL_SEQ_RFU, BLE_SVC_L2CAP_Conn_Update_Slave_Latency);
-	UTIL_SEQ_RegTask(1<<CFG_TASK_SW3_BUTTON_PUSHED_ID,UTIL_SEQ_RFU, IOT_App_Button3_Trigger_Received);
+  UTIL_SEQ_RegTask(1<<CFG_TASK_SW1_BUTTON_PUSHED_ID,UTIL_SEQ_RFU, Connection_Interval_Update_Req);
+  UTIL_SEQ_RegTask(1<<CFG_TASK_SW2_BUTTON_PUSHED_ID,UTIL_SEQ_RFU, BLE_SVC_L2CAP_Conn_Update_Slave_Latency);
+  UTIL_SEQ_RegTask(1<<CFG_TASK_SW3_BUTTON_PUSHED_ID,UTIL_SEQ_RFU, IOT_App_Button3_Trigger_Received);
   /* USER CODE END APP_BLE_Init_2 */
 
   return;
@@ -435,9 +434,9 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
   /* PAIRING */
 
   /* USER CODE BEGIN SVCCTL_App_Notification */
-	float Connection_Interval;
-	float Supervision_Timeout;
-	aci_l2cap_connection_update_resp_event_rp0 *l2cap_connection_update_resp;
+  float Connection_Interval;
+  float Supervision_Timeout;
+  aci_l2cap_connection_update_resp_event_rp0 *l2cap_connection_update_resp;
   /* USER CODE END SVCCTL_App_Notification */
 
   p_event_pckt = (hci_event_pckt*) ((hci_uart_pckt *) p_Pckt)->data;
@@ -543,35 +542,50 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
           HandleNotification.ConnectionHandle = BleApplicationContext.BleApplicationContext_legacy.connectionHandle;
           Custom_APP_Notification(&HandleNotification);
           /* USER CODE BEGIN HCI_EVT_LE_CONN_COMPLETE */
-			APP_DBG_MSG("\r\n\r** CONNECTION UPDATE EVENT WITH CLIENT \n");
+          APP_DBG_MSG("\r\n\r** CONNECTION UPDATE EVENT WITH CLIENT \n");
+          p_connection_complete_event = (hci_le_connection_complete_event_rp0 *) p_meta_evt->data;
 
-			/* USER CODE BEGIN EVT_LE_CONN_UPDATE_COMPLETE */
-			p_connection_complete_event = (hci_le_connection_complete_event_rp0 *) p_meta_evt->data;
+          BleApplicationContext.BleApplicationContext_legacy.connectionHandle = p_connection_complete_event->Connection_Handle;
 
-			BleApplicationContext.BleApplicationContext_legacy.connectionHandle = p_connection_complete_event->Connection_Handle;
+          Connection_Interval = p_connection_complete_event->Conn_Interval * 1.25;
 
-			Connection_Interval = p_connection_complete_event->Conn_Interval * 1.25;
+          APP_DBG_MSG("CONNECTION COMPLETED - SLAVE \n");
+          APP_DBG_MSG("**INTERVAL = %.2f ms \n",Connection_Interval);
+          APP_DBG_MSG("**LATENCY = 0x%x \n",p_connection_complete_event->Conn_Latency);
+          Supervision_Timeout = p_connection_complete_event->Supervision_Timeout * 10;
+          APP_DBG_MSG("**SUPERVISION_TIMEOUT = %.2f ms \r\n",Supervision_Timeout);
+          APP_DBG_MSG("\r\n\r");
 
-			APP_DBG_MSG("CONNECTION COMPLETED - SLAVE \n");
-			APP_DBG_MSG("**INTERVAL = %.2f ms \n",Connection_Interval);
-			APP_DBG_MSG("**LATENCY = 0x%x \n",p_connection_complete_event->Conn_Latency);
-			Supervision_Timeout = p_connection_complete_event->Supervision_Timeout * 10;
-			APP_DBG_MSG("**SUPERVISION_TIMEOUT = %.2f ms \r\n",Supervision_Timeout);
-			APP_DBG_MSG("\r\n\r");
+          tBleStatus status;
+          uint8_t tx_phy;
+          uint8_t rx_phy;
 
-			tBleStatus status;
-			uint8_t tx_phy;
-			uint8_t rx_phy;
-			status = hci_le_read_phy(BleApplicationContext.BleApplicationContext_legacy.connectionHandle,&tx_phy,&rx_phy);
-			  if (status != BLE_STATUS_SUCCESS)
-			  {
-			    APP_DBG_MSG("Read phy cmd failure: 0x%x \n", status);
-			  }
-			  else
-			  {
-			    APP_DBG_MSG("**TX PHY = %d\n", tx_phy);
-			    APP_DBG_MSG("**RX PHY = %d\n\n", rx_phy);
-			  }
+          status = hci_le_read_phy(BleApplicationContext.BleApplicationContext_legacy.connectionHandle,&tx_phy,&rx_phy);
+
+          if (status != BLE_STATUS_SUCCESS)
+          {
+            APP_DBG_MSG("Read phy cmd failure: 0x%x \n", status);
+          }
+          else
+          {
+            APP_DBG_MSG("**TX PHY = %d\n", tx_phy);
+            APP_DBG_MSG("**RX PHY = %d\n\n", rx_phy);
+          }
+
+          status = hci_le_set_data_length(BleApplicationContext.BleApplicationContext_legacy.connectionHandle,251,2112);
+
+          if (status != BLE_STATUS_SUCCESS)
+          {
+            APP_DBG_MSG("set data length command error \n");
+          }
+
+          status = aci_gatt_exchange_config(BleApplicationContext.BleApplicationContext_legacy.connectionHandle);
+
+          if (status != BLE_STATUS_SUCCESS)
+          {
+            APP_DBG_MSG("change MTU cmd failure: 0x%x\n", status);
+          }
+
           /* USER CODE END HCI_EVT_LE_CONN_COMPLETE */
           break; /* HCI_LE_CONNECTION_COMPLETE_SUBEVT_CODE */
         }
@@ -608,18 +622,18 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
           mutex = 1;
 #endif /* L2CAP_REQUEST_NEW_CONN_PARAM != 0 */
           /* USER CODE BEGIN EVT_BLUE_L2CAP_CONNECTION_UPDATE_RESP */
-			APP_DBG_MSG("\n L2CAP CONNECTION UPDATE RESPONSE \r\n");
-			l2cap_connection_update_resp = (aci_l2cap_connection_update_resp_event_rp0 *)(p_blecore_evt->data);
-			if (l2cap_connection_update_resp->Result != BLE_STATUS_SUCCESS)
-			{
-				mutex = 1;
-				APP_DBG_MSG("** CONN UPDATE REQ: FAILED \r\n");
-			}
-			else
-			{
-				APP_DBG_MSG("** CONN UPDATE REQ: ACCEPTED \r\n");
-				APP_DBG_MSG("\r\n\r");
-			}
+          APP_DBG_MSG("\n L2CAP CONNECTION UPDATE RESPONSE \r\n");
+          l2cap_connection_update_resp = (aci_l2cap_connection_update_resp_event_rp0 *)(p_blecore_evt->data);
+          if (l2cap_connection_update_resp->Result != BLE_STATUS_SUCCESS)
+          {
+            mutex = 1;
+            APP_DBG_MSG("** CONN UPDATE REQ: FAILED \r\n");
+          }
+          else
+          {
+            APP_DBG_MSG("** CONN UPDATE REQ: ACCEPTED \r\n");
+            APP_DBG_MSG("\r\n\r");
+          }
           /* USER CODE END EVT_BLUE_L2CAP_CONNECTION_UPDATE_RESP */
           break;
 
@@ -1213,7 +1227,7 @@ void BLE_SVC_L2CAP_Conn_Update(uint16_t ConnectionHandle)
     #if(CFG_DEBUG_APP_TRACE != 0)
           APP_DBG_MSG("BLE_SVC_L2CAP_Conn_Update(), Failed \r\n\r");
     #endif
-	      }
+        }
     }    
   /* USER CODE END BLE_SVC_L2CAP_Conn_Update_1 */
 
@@ -1241,8 +1255,7 @@ void BLE_SVC_L2CAP_Conn_Update(uint16_t ConnectionHandle)
   }
 
   /* USER CODE BEGIN BLE_SVC_L2CAP_Conn_Update_2 */
-	
-	
+
   /* USER CODE END BLE_SVC_L2CAP_Conn_Update_2 */
 
   return;
@@ -1264,15 +1277,17 @@ static void Connection_Interval_Update_Req(void)
 /* USER CODE BEGIN FD_SPECIFIC_FUNCTIONS */
 void APP_BLE_Key_Button1_Action(void)
 {
-	UTIL_SEQ_SetTask(1 << CFG_TASK_SW1_BUTTON_PUSHED_ID, CFG_SCH_PRIO_0);
+  UTIL_SEQ_SetTask(1 << CFG_TASK_SW1_BUTTON_PUSHED_ID, CFG_SCH_PRIO_0);
 }
+
 void APP_BLE_Key_Button2_Action(void)
 {
-	UTIL_SEQ_SetTask(1 << CFG_TASK_SW2_BUTTON_PUSHED_ID, CFG_SCH_PRIO_0);
+  UTIL_SEQ_SetTask(1 << CFG_TASK_SW2_BUTTON_PUSHED_ID, CFG_SCH_PRIO_0);
 }
+
 void APP_BLE_Key_Button3_Action(void)
 {
-	UTIL_SEQ_SetTask(1 << CFG_TASK_SW3_BUTTON_PUSHED_ID, CFG_SCH_PRIO_0);
+  UTIL_SEQ_SetTask(1 << CFG_TASK_SW3_BUTTON_PUSHED_ID, CFG_SCH_PRIO_0);
 }
 /* USER CODE END FD_SPECIFIC_FUNCTIONS */
 /*************************************************************
